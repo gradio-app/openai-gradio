@@ -12,7 +12,7 @@ is a Python package that makes it very easy for developers to create machine lea
 pip install openai-gradio
 ``` -->
 
-That's it! 
+That's it! Easy
 
 # Basic Usage
 
