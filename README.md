@@ -29,7 +29,7 @@ import gradio as gr
 import openai_gradio
 
 gr.load(
-    name='gpt-3.5-turbo',
+    name='gpt-4-turbo',
     src=openai_gradio.registry,
 ).launch()
 ```
@@ -47,10 +47,10 @@ import gradio as gr
 import openai_gradio
 
 gr.load(
-    name='gpt-3.5-turbo',
+    name='gpt-4-turbo',
     src=openai_gradio.registry,
     title='OpenAI-Gradio Integration',
-    description="Chat with GPT-3.5-turbo model.",
+    description="Chat with GPT-4-turbo model.",
     examples=["Explain quantum gravity to a 5-year old.", "How many R are there in the word Strawberry?"]
 ).launch()
 ```
@@ -65,10 +65,10 @@ import gradio as gr
 import openai_gradio
 
 with gr.Blocks() as demo:
-    with gr.Tab("GPT-3.5"):
+    with gr.Tab("GPT-4-turbo"):
+        gr.load('gpt-4-turbo', src=openai_gradio.registry)
+    with gr.Tab("GPT-3.5-turbo"):
         gr.load('gpt-3.5-turbo', src=openai_gradio.registry)
-    with gr.Tab("GPT-4"):
-        gr.load('gpt-4', src=openai_gradio.registry)
 
 demo.launch()
 ```
@@ -81,6 +81,7 @@ The `openai-gradio` Python library has two dependencies: `openai` and `gradio`. 
 
 | Model | Context Length | Output Length | Dtype / Precision |
 |-------|----------------|---------------|-------|
+| gpt-4-turbo | 128000 | Varies | - |
 | gpt-3.5-turbo | 4096 | Varies | - |
 | gpt-3.5-turbo-16k | 16384 | Varies | - |
 | gpt-4 | 8192 | Varies | - |
