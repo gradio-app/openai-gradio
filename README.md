@@ -4,13 +4,11 @@ is a Python package that makes it very easy for developers to create machine lea
 
 # Installation
 
-1. Clone this repo: `git clone https://github.com/AK391/openai-gradio.git`
-2. Navigate into the folder that you cloned this repo into: `cd openai-gradio`
-3. Install this package: `pip install -e .`
+You can install `openai-gradio` directly using pip:
 
-<!-- ```bash
+```bash
 pip install openai-gradio
-``` -->
+```
 
 That's it! 
 
