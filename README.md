@@ -23,13 +23,9 @@ export OPENAI_API_KEY=<your token>
 Then in a Python file, write:
 
 ```python
-import gradio as gr
 import openai_gradio
 
-gr.load(
-    name='gpt-4-turbo',
-    src=openai_gradio.registry,
-).launch()
+openai_gradio.registry(name='gpt-4-turbo').launch()
 ```
 
 Run the Python file, and you should see a Gradio Interface connected to the model on OpenAI!
@@ -41,12 +37,10 @@ Run the Python file, and you should see a Gradio Interface connected to the mode
 Once you can create a Gradio UI from an OpenAI endpoint, you can customize it by setting your own input and output components, or any other arguments to `gr.Interface`. For example, the screenshot below was generated with:
 
 ```py
-import gradio as gr
 import openai_gradio
 
-gr.load(
+openai_gradio.registry(
     name='gpt-4-turbo',
-    src=openai_gradio.registry,
     title='OpenAI-Gradio Integration',
     description="Chat with GPT-4-turbo model.",
     examples=["Explain quantum gravity to a 5-year old.", "How many R are there in the word Strawberry?"]
@@ -64,9 +58,9 @@ import openai_gradio
 
 with gr.Blocks() as demo:
     with gr.Tab("GPT-4-turbo"):
-        gr.load('gpt-4-turbo', src=openai_gradio.registry)
+        openai_gradio.registry(name='gpt-4-turbo')
     with gr.Tab("GPT-3.5-turbo"):
-        gr.load('gpt-3.5-turbo', src=openai_gradio.registry)
+        openai_gradio.registry(name='gpt-3.5-turbo')
 
 demo.launch()
 ```
