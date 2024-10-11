@@ -77,13 +77,7 @@ The `openai-gradio` Python library has two dependencies: `openai` and `gradio`. 
 
 # Supported Models in OpenAI
 
-| Model | Context Length | Output Length | Dtype / Precision |
-|-------|----------------|---------------|-------|
-| gpt-4-turbo | 128000 | Varies | - |
-| gpt-3.5-turbo | 4096 | Varies | - |
-| gpt-3.5-turbo-16k | 16384 | Varies | - |
-| gpt-4 | 8192 | Varies | - |
-| gpt-4-32k | 32768 | Varies | - |
+All chat API models supported by OpenAI are compatible with this integration. For a comprehensive list of available models and their specifications, please refer to the [OpenAI Models documentation](https://platform.openai.com/docs/models).
 
 -------
 
