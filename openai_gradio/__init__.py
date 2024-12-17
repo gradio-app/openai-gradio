@@ -7,10 +7,12 @@ import base64
 __version__ = "0.0.3"
 
 
-def get_fn(model_name: str, preprocess: Callable, postprocess: Callable, api_key: str):
+def get_fn(model_name: str, preprocess: Callable, postprocess: Callable, api_key: str, base_url: str):
     def fn(message, history):
         inputs = preprocess(message, history)
         client = OpenAI(api_key=api_key)
+        if base_url:
+            client.base_url=base_url
         completion = client.chat.completions.create(
             model=model_name,
             messages=inputs["messages"],
@@ -92,13 +94,14 @@ def get_pipeline(model_name):
     return "chat"
 
 
-def registry(name: str, token: str | None = None, **kwargs):
+def registry(name: str, token: str, base_url: str | None = None, **kwargs):
     """
     Create a Gradio Interface for a model on OpenAI.
 
     Parameters:
         - name (str): The name of the OpenAI model.
         - token (str, optional): The API key for OpenAI.
+        - base_url (str, optional): The base URL.
     """
     api_key = token or os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -106,7 +109,7 @@ def registry(name: str, token: str | None = None, **kwargs):
 
     pipeline = get_pipeline(name)
     inputs, outputs, preprocess, postprocess = get_interface_args(pipeline)
-    fn = get_fn(name, preprocess, postprocess, api_key)
+    fn = get_fn(name, preprocess, postprocess, api_key, base_url)
 
     if pipeline == "chat":
         interface = gr.ChatInterface(fn=fn, multimodal=True, **kwargs)
