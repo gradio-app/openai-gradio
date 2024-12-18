@@ -17,8 +17,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "gradio>=5.0.0b5",
     "openai",
+    "gradio>=5.5.0",
+    "numpy",
+    "pydub",
+    "gradio_webrtc[vad]",
+    "python-dotenv",
+    "twilio",
+    "numba==0.60.0",
 ]
 
 [project.urls]

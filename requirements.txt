@@ -1,2 +1,8 @@
 openai
-gradio==5.0.0b5
+gradio>=5.5.0
+numpy
+pydub
+gradio_webrtc[vad]
+python-dotenv
+twilio
+numba==0.60.0
