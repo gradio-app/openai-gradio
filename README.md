@@ -36,6 +36,56 @@ Run the Python file, and you should see a Gradio Interface connected to the mode
 
 ![ChatInterface](chatinterface.png)
 
+# Voice Chat
+
+OpenAI-Gradio also supports voice chat capabilities. You can enable this in two ways:
+
+1. Using a realtime model:
+```python
+import gradio as gr
+import openai_gradio
+
+gr.load(
+    name='gpt-4o-realtime-preview-2024-10-01',
+    src=openai_gradio.registry
+).launch()
+```
+
+2. Explicitly enabling voice chat with any model:
+```python
+import gradio as gr
+import openai_gradio
+
+gr.load(
+    name='gpt-4-turbo',
+    src=openai_gradio.registry,
+    enable_voice=True
+).launch()
+```
+
+This will create a WebRTC-based interface that allows for real-time voice conversations with the AI model.
+
+## Voice Chat API Keys
+
+For voice chat functionality, you'll need:
+
+1. OpenAI API key (required for all features):
+```bash
+export OPENAI_API_KEY=<your OpenAI token>
+```
+
+2. Twilio credentials (required for WebRTC voice chat):
+```bash
+export TWILIO_ACCOUNT_SID=<your Twilio account SID>
+export TWILIO_AUTH_TOKEN=<your Twilio auth token>
+```
+
+You can get Twilio credentials by:
+1. Creating a free account at [Twilio](https://www.twilio.com/)
+2. Finding your Account SID and Auth Token in the Twilio Console
+
+Without Twilio credentials, the voice chat will still work but might have connectivity issues in some network environments.
+
 # Customization 
 
 Once you can create a Gradio UI from an OpenAI endpoint, you can customize it by setting your own input and output components, or any other arguments to `gr.Interface`. For example, the screenshot below was generated with:
