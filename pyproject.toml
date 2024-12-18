@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openai-gradio"
-version = "0.0.4"
+version = "0.0.5"
 description = "A Python package for creating Gradio applications with OpenAI models"
 authors = [
     { name = "AK", email = "ahsen.khaliq@gmail.com" }

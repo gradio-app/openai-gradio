@@ -15,7 +15,7 @@ from gradio_webrtc import (
 from pydub import AudioSegment
 import time
 
-__version__ = "0.0.3"
+__version__ = "0.0.5"
 
 SAMPLE_RATE = 24000
 
