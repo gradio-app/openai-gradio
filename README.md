@@ -51,13 +51,13 @@ gr.load(
 ).launch()
 ```
 
-2. Explicitly enabling voice chat with any model:
+2. Explicitly enabling voice chat with any realtime model:
 ```python
 import gradio as gr
 import openai_gradio
 
 gr.load(
-    name='gpt-4-turbo',
+    name='gpt-4o-mini-realtime-preview-2024-12-17',
     src=openai_gradio.registry,
     enable_voice=True
 ).launch()
