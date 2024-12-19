@@ -162,7 +162,10 @@ def registry(name: str, token: str | None = None, twilio_sid: str | None = None,
     twilio_token = twilio_token or os.environ.get("TWILIO_AUTH_TOKEN")
 
     with gr.Blocks() as interface:
-        with gr.Row(visible=True) as api_key_row:
+        # Set initial visibility based on whether API key is provided
+        show_api_input = api_key is None
+        
+        with gr.Row(visible=show_api_input) as api_key_row:
             api_key_input = gr.Textbox(
                 label="OpenAI API Key",
                 placeholder="Enter your OpenAI API Key",
@@ -170,7 +173,7 @@ def registry(name: str, token: str | None = None, twilio_sid: str | None = None,
                 type="password",
             )
             
-        with gr.Row(visible=False) as row:
+        with gr.Row(visible=not show_api_input) as row:
             webrtc = WebRTC(
                 label="Conversation",
                 modality="audio",
