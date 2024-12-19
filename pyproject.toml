@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "openai",
+    "openai>=1.58.1",
     "gradio>=5.5.0",
     "numpy",
     "pydub",
