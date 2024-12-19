@@ -1,11 +1,12 @@
 import os
-from openai import OpenAI
-import gradio as gr
-from typing import Callable
-import base64
 import asyncio
+import base64
+import time
 from threading import Event, Thread
+
+import gradio as gr
 import numpy as np
+from openai import OpenAI
 from gradio_webrtc import (
     AdditionalOutputs,
     StreamHandler,
@@ -13,9 +14,6 @@ from gradio_webrtc import (
     get_twilio_turn_credentials,
 )
 from pydub import AudioSegment
-import time
-
-__version__ = "0.0.5"
 
 SAMPLE_RATE = 24000
 
@@ -31,7 +29,7 @@ def encode_audio(sample_rate, data):
     )
     return base64.b64encode(pcm_audio).decode("utf-8")
 
-class OpenAIHandler(StreamHandler):
+class RealtimeHandler(StreamHandler):
     def __init__(
         self,
         expected_layout="mono",
@@ -44,49 +42,40 @@ class OpenAIHandler(StreamHandler):
             output_frame_size,
             input_sample_rate=SAMPLE_RATE,
         )
-        self.connection = None
-        self.all_output_data = None
+        # Initialize Event objects first
         self.args_set = Event()
         self.quit = Event()
         self.connected = Event()
+        self.reset_state()
+
+    def reset_state(self):
+        """Reset connection state for new recording session"""
+        self.connection = None
+        self.args_set.clear()
+        self.quit.clear()
+        self.connected.clear()
         self.thread = None
         self._generator = None
-        self.last_frame_time = time.time()
-        self.TIMEOUT_THRESHOLD = 60
-        self.reconnect_attempts = 0
-        self.MAX_RECONNECT_ATTEMPTS = 3
-        self.RECONNECT_DELAY = 2  # seconds
+        self.current_session = None
 
     def copy(self):
-        return OpenAIHandler(
+        return RealtimeHandler(
             expected_layout=self.expected_layout,
             output_sample_rate=self.output_sample_rate,
             output_frame_size=self.output_frame_size,
         )
 
     def _initialize_connection(self, api_key: str):
-        """Connect to realtime API with reconnection logic."""
-        while not self.quit.is_set() and self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
-            try:
-                self.client = OpenAI(api_key=api_key)
-                with self.client.beta.realtime.connect(
-                    model="gpt-4o-realtime-preview-2024-10-01"
-                ) as conn:
-                    conn.session.update(session={"turn_detection": {"type": "server_vad"}})
-                    self.connection = conn
-                    self.connected.set()
-                    self.reconnect_attempts = 0  # Reset counter on successful connection
-                    while not self.quit.is_set():
-                        time.sleep(0.25)
-            except Exception as e:
-                print(f"Connection error: {str(e)}")
-                self.reconnect_attempts += 1
-                if self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
-                    print(f"Attempting to reconnect in {self.RECONNECT_DELAY} seconds...")
-                    time.sleep(self.RECONNECT_DELAY)
-                else:
-                    print("Max reconnection attempts reached")
-                    break
+        self.client = OpenAI(api_key=api_key)
+        with self.client.beta.realtime.connect(
+            model="gpt-4o-realtime-preview-2024-10-01"
+        ) as conn:
+            conn.session.update(session={"turn_detection": {"type": "server_vad"}})
+            self.connection = conn
+            self.connected.set()
+            self.current_session = conn.session
+            while not self.quit.is_set():
+                time.sleep(0.25)
 
     async def fetch_args(self):
         if self.channel:
@@ -97,36 +86,28 @@ class OpenAIHandler(StreamHandler):
         self.args_set.set()
 
     def receive(self, frame: tuple[int, np.ndarray]) -> None:
-        current_time = time.time()
-        if current_time - self.last_frame_time > self.TIMEOUT_THRESHOLD:
-            if self.connection:
-                try:
-                    self.connection.close()
-                except:
-                    pass
-                self.connection = None
-                self.connected.clear()  # Reset connected event
-                self.reconnect_attempts = 0  # Reset reconnection counter
-            self.last_frame_time = current_time
-            return
-
         if not self.channel:
             return
-        if not self.connection:
-            asyncio.run_coroutine_threadsafe(self.fetch_args(), self.loop)
-            self.args_set.wait()
-            self.thread = Thread(
-                target=self._initialize_connection, args=(self.latest_args[-1],)
-            )
-            self.thread.start()
-            self.connected.wait()
         try:
+            # Initialize connection if needed
+            if not self.connection:
+                asyncio.run_coroutine_threadsafe(self.fetch_args(), self.loop)
+                self.args_set.wait()
+                self.thread = Thread(
+                    target=self._initialize_connection, args=(self.latest_args[-1],)
+                )
+                self.thread.start()
+                self.connected.wait()
+            
+            # Send audio data
             assert self.connection, "Connection not initialized"
             sample_rate, array = frame
             array = array.squeeze()
             audio_message = encode_audio(sample_rate, array)
+            
+            # Send the audio data
             self.connection.input_audio_buffer.append(audio=audio_message)
-            self.last_frame_time = current_time
+            
         except Exception as e:
             print(f"Error in receive: {str(e)}")
             import traceback
@@ -161,154 +142,50 @@ class OpenAIHandler(StreamHandler):
 
     def shutdown(self) -> None:
         if self.connection:
-            self.connection.close()
             self.quit.set()
+            self.connection.close()
             if self.thread:
                 self.thread.join(timeout=5)
-
-    # ... rest of the OpenAIHandler implementation from your reference ...
-
-def get_fn(model_name: str, preprocess: Callable, postprocess: Callable, api_key: str):
-    def fn(message, history):
-        inputs = preprocess(message, history)
-        client = OpenAI(api_key=api_key)
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=inputs["messages"],
-            stream=True,
-        )
-        response_text = ""
-        for chunk in completion:
-            delta = chunk.choices[0].delta.content or ""
-            response_text += delta
-            yield postprocess(response_text)
-
-    return fn
-
-
-def get_image_base64(url: str, ext: str):
-    with open(url, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-    return "data:image/" + ext + ";base64," + encoded_string
-
-
-def handle_user_msg(message: str):
-    if type(message) is str:
-        return message
-    elif type(message) is dict:
-        if message["files"] is not None and len(message["files"]) > 0:
-            ext = os.path.splitext(message["files"][-1])[1].strip(".")
-            if ext.lower() in ["png", "jpg", "jpeg", "gif", "pdf"]:
-                encoded_str = get_image_base64(message["files"][-1], ext)
-            else:
-                raise NotImplementedError(f"Not supported file type {ext}")
-            content = [
-                    {"type": "text", "text": message["text"]},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": encoded_str,
-                        }
-                    },
-                ]
-        else:
-            content = message["text"]
-        return content
-    else:
-        raise NotImplementedError
-
-
-def get_interface_args(pipeline):
-    if pipeline == "chat":
-        inputs = None
-        outputs = None
-
-        def preprocess(message, history):
-            messages = []
-            files = None
-            for user_msg, assistant_msg in history:
-                if assistant_msg is not None:
-                    messages.append({"role": "user", "content": handle_user_msg(user_msg)})
-                    messages.append({"role": "assistant", "content": assistant_msg})
-                else:
-                    files = user_msg
-            if type(message) is str and files is not None:
-                message = {"text":message, "files":files}
-            elif type(message) is dict and files is not None:
-                if message["files"] is None or len(message["files"]) == 0:
-                    message["files"] = files
-            messages.append({"role": "user", "content": handle_user_msg(message)})
-            return {"messages": messages}
-
-        postprocess = lambda x: x
-    else:
-        # Add other pipeline types when they will be needed
-        raise ValueError(f"Unsupported pipeline type: {pipeline}")
-    return inputs, outputs, preprocess, postprocess
-
-
-def get_pipeline(model_name, enable_voice=False):
-    if enable_voice or "realtime" in model_name.lower():
-        return "voice"
-    return "chat"
-
-
-def registry(name: str, token: str | None = None, enable_voice: bool = False, twilio_sid: str | None = None, twilio_token: str | None = None, **kwargs):
-    """
-    Create a Gradio Interface for a model on OpenAI.
-
-    Parameters:
-        - name (str): The name of the OpenAI model.
-        - token (str, optional): The API key for OpenAI.
-        - enable_voice (bool, optional): Force enable voice interface regardless of model name.
-        - twilio_sid (str, optional): Twilio Account SID for TURN server. Uses default if not provided.
-        - twilio_token (str, optional): Twilio Auth Token for TURN server. Uses default if not provided.
-    """
-    api_key = token or os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set.")
-
-    pipeline = get_pipeline(name, enable_voice)
-    
-    if pipeline == "voice":
-        with gr.Blocks() as interface:
-            with gr.Row() as api_key_row:
-                api_key_input = gr.Textbox(
-                    label="OpenAI API Key",
-                    placeholder="Enter your OpenAI API Key",
-                    value=api_key,
-                    type="password",
-                    visible=False
-                )
-            with gr.Row() as row:
-                # Only get Twilio credentials if both sid and token are provided
-                rtc_config = get_twilio_turn_credentials(twilio_sid, twilio_token) if (twilio_sid and twilio_token) else None
-                webrtc = WebRTC(
-                    label="Conversation",
-                    modality="audio",
-                    mode="send-receive",
-                    rtc_configuration=rtc_config,
-                )
-                
-            webrtc.stream(
-                OpenAIHandler(),
-                inputs=[webrtc, api_key_input],
-                outputs=[webrtc],
-                time_limit=90,
-                concurrency_limit=10,
-            )
-    else:
-        # Existing chat interface code
-        inputs, outputs, preprocess, postprocess = get_interface_args(pipeline)
-        fn = get_fn(name, preprocess, postprocess, api_key)
-        
-        if pipeline == "chat":
-            interface = gr.ChatInterface(fn=fn, multimodal=True, **kwargs)
-        else:
-            interface = gr.Interface(fn=fn, inputs=inputs, outputs=outputs, **kwargs)
-
-    return interface
+            self.reset_state()  # Reset state after shutdown
 
 def update_chatbot(chatbot: list[dict], response):
     chatbot.append({"role": "assistant", "content": response.transcript})
     return chatbot
+
+def registry(name: str, token: str | None = None, **kwargs):
+    api_key = token or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is not set.")
+
+    with gr.Blocks() as interface:
+        with gr.Row(visible=True) as api_key_row:
+            api_key_input = gr.Textbox(
+                label="OpenAI API Key",
+                placeholder="Enter your OpenAI API Key",
+                value=api_key,
+                type="password",
+            )
+            
+        with gr.Row(visible=False) as row:
+            webrtc = WebRTC(
+                label="Conversation",
+                modality="audio",
+                mode="send-receive",
+                rtc_configuration=get_twilio_turn_credentials(),
+            )
+                
+            webrtc.stream(
+                RealtimeHandler(),
+                inputs=[webrtc, api_key_input],
+                outputs=[webrtc],
+                time_limit=90,
+                concurrency_limit=2,
+            )
+            
+        api_key_input.submit(
+            lambda: (gr.update(visible=False), gr.update(visible=True)),
+            None,
+            [api_key_row, row],
+        )
+
+    return interface
