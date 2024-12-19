@@ -51,6 +51,8 @@ class OpenAIHandler(StreamHandler):
         self.connected = Event()
         self.thread = None
         self._generator = None
+        self.last_frame_time = time.time()
+        self.TIMEOUT_THRESHOLD = 60
 
     def copy(self):
         return OpenAIHandler(
@@ -80,6 +82,14 @@ class OpenAIHandler(StreamHandler):
         self.args_set.set()
 
     def receive(self, frame: tuple[int, np.ndarray]) -> None:
+        current_time = time.time()
+        if current_time - self.last_frame_time > self.TIMEOUT_THRESHOLD:
+            if self.connection:
+                self.connection.close()
+                self.connection = None
+            self.last_frame_time = current_time
+            return
+
         if not self.channel:
             return
         if not self.connection:
@@ -96,6 +106,7 @@ class OpenAIHandler(StreamHandler):
             array = array.squeeze()
             audio_message = encode_audio(sample_rate, array)
             self.connection.input_audio_buffer.append(audio=audio_message)
+            self.last_frame_time = current_time
         except Exception as e:
             print(f"Error in receive: {str(e)}")
             import traceback
@@ -222,7 +233,7 @@ def get_pipeline(model_name, enable_voice=False):
     return "chat"
 
 
-def registry(name: str, token: str | None = None, enable_voice: bool = False, **kwargs):
+def registry(name: str, token: str | None = None, enable_voice: bool = False, twilio_sid: str | None = None, twilio_token: str | None = None, **kwargs):
     """
     Create a Gradio Interface for a model on OpenAI.
 
@@ -230,6 +241,8 @@ def registry(name: str, token: str | None = None, enable_voice: bool = False, **
         - name (str): The name of the OpenAI model.
         - token (str, optional): The API key for OpenAI.
         - enable_voice (bool, optional): Force enable voice interface regardless of model name.
+        - twilio_sid (str, optional): Twilio Account SID for TURN server.
+        - twilio_token (str, optional): Twilio Auth Token for TURN server.
     """
     api_key = token or os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -252,7 +265,7 @@ def registry(name: str, token: str | None = None, enable_voice: bool = False, **
                     label="Conversation",
                     modality="audio",
                     mode="send-receive",
-                    rtc_configuration=get_twilio_turn_credentials(),
+                    rtc_configuration=get_twilio_turn_credentials(twilio_sid, twilio_token),
                 )
                 
             webrtc.stream(
