@@ -152,10 +152,14 @@ def update_chatbot(chatbot: list[dict], response):
     chatbot.append({"role": "assistant", "content": response.transcript})
     return chatbot
 
-def registry(name: str, token: str | None = None, **kwargs):
+def registry(name: str, token: str | None = None, twilio_sid: str | None = None, twilio_token: str | None = None, **kwargs):
     api_key = token or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise ValueError("OPENAI_API_KEY environment variable is not set.")
+
+    # Use default Twilio credentials if none provided
+    twilio_sid = twilio_sid or os.environ.get("TWILIO_ACCOUNT_SID")
+    twilio_token = twilio_token or os.environ.get("TWILIO_AUTH_TOKEN")
 
     with gr.Blocks() as interface:
         with gr.Row(visible=True) as api_key_row:
@@ -171,7 +175,7 @@ def registry(name: str, token: str | None = None, **kwargs):
                 label="Conversation",
                 modality="audio",
                 mode="send-receive",
-                rtc_configuration=get_twilio_turn_credentials(),
+                rtc_configuration=get_twilio_turn_credentials(twilio_sid, twilio_token),
             )
                 
             webrtc.stream(
