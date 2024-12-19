@@ -53,6 +53,9 @@ class OpenAIHandler(StreamHandler):
         self._generator = None
         self.last_frame_time = time.time()
         self.TIMEOUT_THRESHOLD = 60
+        self.reconnect_attempts = 0
+        self.MAX_RECONNECT_ATTEMPTS = 3
+        self.RECONNECT_DELAY = 2  # seconds
 
     def copy(self):
         return OpenAIHandler(
@@ -62,16 +65,28 @@ class OpenAIHandler(StreamHandler):
         )
 
     def _initialize_connection(self, api_key: str):
-        """Connect to realtime API. Run forever in separate thread to keep connection open."""
-        self.client = OpenAI(api_key=api_key)
-        with self.client.beta.realtime.connect(
-            model="gpt-4o-realtime-preview-2024-10-01"
-        ) as conn:
-            conn.session.update(session={"turn_detection": {"type": "server_vad"}})
-            self.connection = conn
-            self.connected.set()
-            while not self.quit.is_set():
-                time.sleep(0.25)
+        """Connect to realtime API with reconnection logic."""
+        while not self.quit.is_set() and self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
+            try:
+                self.client = OpenAI(api_key=api_key)
+                with self.client.beta.realtime.connect(
+                    model="gpt-4o-realtime-preview-2024-10-01"
+                ) as conn:
+                    conn.session.update(session={"turn_detection": {"type": "server_vad"}})
+                    self.connection = conn
+                    self.connected.set()
+                    self.reconnect_attempts = 0  # Reset counter on successful connection
+                    while not self.quit.is_set():
+                        time.sleep(0.25)
+            except Exception as e:
+                print(f"Connection error: {str(e)}")
+                self.reconnect_attempts += 1
+                if self.reconnect_attempts < self.MAX_RECONNECT_ATTEMPTS:
+                    print(f"Attempting to reconnect in {self.RECONNECT_DELAY} seconds...")
+                    time.sleep(self.RECONNECT_DELAY)
+                else:
+                    print("Max reconnection attempts reached")
+                    break
 
     async def fetch_args(self):
         if self.channel:
@@ -85,8 +100,13 @@ class OpenAIHandler(StreamHandler):
         current_time = time.time()
         if current_time - self.last_frame_time > self.TIMEOUT_THRESHOLD:
             if self.connection:
-                self.connection.close()
+                try:
+                    self.connection.close()
+                except:
+                    pass
                 self.connection = None
+                self.connected.clear()  # Reset connected event
+                self.reconnect_attempts = 0  # Reset reconnection counter
             self.last_frame_time = current_time
             return
 
@@ -241,8 +261,8 @@ def registry(name: str, token: str | None = None, enable_voice: bool = False, tw
         - name (str): The name of the OpenAI model.
         - token (str, optional): The API key for OpenAI.
         - enable_voice (bool, optional): Force enable voice interface regardless of model name.
-        - twilio_sid (str, optional): Twilio Account SID for TURN server.
-        - twilio_token (str, optional): Twilio Auth Token for TURN server.
+        - twilio_sid (str, optional): Twilio Account SID for TURN server. Uses default if not provided.
+        - twilio_token (str, optional): Twilio Auth Token for TURN server. Uses default if not provided.
     """
     api_key = token or os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -261,11 +281,13 @@ def registry(name: str, token: str | None = None, enable_voice: bool = False, tw
                     visible=False
                 )
             with gr.Row() as row:
+                # Only get Twilio credentials if both sid and token are provided
+                rtc_config = get_twilio_turn_credentials(twilio_sid, twilio_token) if (twilio_sid and twilio_token) else None
                 webrtc = WebRTC(
                     label="Conversation",
                     modality="audio",
                     mode="send-receive",
-                    rtc_configuration=get_twilio_turn_credentials(twilio_sid, twilio_token),
+                    rtc_configuration=rtc_config,
                 )
                 
             webrtc.stream(
