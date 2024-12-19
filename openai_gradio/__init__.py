@@ -35,6 +35,7 @@ class RealtimeHandler(StreamHandler):
         expected_layout="mono",
         output_sample_rate=SAMPLE_RATE,
         output_frame_size=480,
+        model=None
     ) -> None:
         super().__init__(
             expected_layout,
@@ -42,6 +43,7 @@ class RealtimeHandler(StreamHandler):
             output_frame_size,
             input_sample_rate=SAMPLE_RATE,
         )
+        self.model = model
         # Initialize Event objects first
         self.args_set = Event()
         self.quit = Event()
@@ -63,12 +65,13 @@ class RealtimeHandler(StreamHandler):
             expected_layout=self.expected_layout,
             output_sample_rate=self.output_sample_rate,
             output_frame_size=self.output_frame_size,
+            model=self.model
         )
 
     def _initialize_connection(self, api_key: str):
         self.client = OpenAI(api_key=api_key)
         with self.client.beta.realtime.connect(
-            model="gpt-4o-realtime-preview-2024-10-01"
+            model=self.model
         ) as conn:
             conn.session.update(session={"turn_detection": {"type": "server_vad"}})
             self.connection = conn
@@ -157,6 +160,9 @@ def registry(name: str, token: str | None = None, twilio_sid: str | None = None,
     if not api_key:
         raise ValueError("OPENAI_API_KEY environment variable is not set.")
 
+    # Extract model name from the name parameter
+    model = name if name else "gpt-4o-realtime-preview-2024-10-01"
+
     # Use default Twilio credentials if none provided
     twilio_sid = twilio_sid or os.environ.get("TWILIO_ACCOUNT_SID")
     twilio_token = twilio_token or os.environ.get("TWILIO_AUTH_TOKEN")
@@ -182,11 +188,11 @@ def registry(name: str, token: str | None = None, twilio_sid: str | None = None,
             )
                 
             webrtc.stream(
-                RealtimeHandler(),
+                RealtimeHandler(model=model),
                 inputs=[webrtc, api_key_input],
                 outputs=[webrtc],
                 time_limit=90,
-                concurrency_limit=2,
+                concurrency_limit=10,
             )
             
         api_key_input.submit(
