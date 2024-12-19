@@ -260,7 +260,7 @@ def registry(name: str, token: str | None = None, enable_voice: bool = False, **
                 inputs=[webrtc, api_key_input],
                 outputs=[webrtc],
                 time_limit=90,
-                concurrency_limit=2,
+                concurrency_limit=10,
             )
     else:
         # Existing chat interface code
